@@ -248,7 +248,7 @@ class VpnApp(App):
 
     async def show_message_modal(self, message: str):
         # This check prevents pushing screen during shutdown or if app not fully ready
-        if self.is_running and self.app_is_mounted:
+        if self.is_running: # and self.app_is_mounted:
             await self.push_screen(MessageScreen(message))
 
 
