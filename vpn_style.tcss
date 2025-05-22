@@ -1,0 +1,51 @@
+
+Screen {
+    background: $surface;
+    color: $text;
+    layout: vertical;
+    overflow-y: auto; /* Allow screen to scroll if content is too long */
+}
+Header { dock: top; background: $primary; color: $text; height: 1; text-style: bold; }
+Header Title, Header SubTitle { color: $text; }
+Footer { dock: bottom; background: $primary-darken-2; color: $text-muted; height: 1; }
+
+#main_layout { padding: 0 1; height: 1fr; }
+#status_bar { height: 1; background: $primary-background-darken-1; padding: 0 1; dock: top; }
+#xray_path_status { width: 1fr; content-align: left middle; color: $text-muted; }
+#active_log_display { width: 3fr; content-align: right middle; color: $warning; overflow: hidden; }
+
+.section_header { padding: 1 0 0 0; text-style: bold underline; color: $secondary; }
+
+.list_container { /* Common style for subscription and server list containers */
+    border: round $primary-background-darken-2;
+    padding: 0 1;
+    height: auto; 
+    max-height: 10; /* Max height before scrolling */
+    overflow-y: auto;
+    margin-bottom: 1; /* Space below list containers */
+}
+#subscriptions_list_container { /* Specific if needed, else uses .list_container */ }
+#server_list_display_container { /* Specific if needed, else uses .list_container */
+    /* max-height: 1fr; /* Allow server list to take more space if needed, but careful with Log below */
+}
+
+
+.sub_entry, .server_entry { /* Common style for list items */
+    padding: 1 0;
+    background: $boost;
+    border-bottom: dashed $primary-background-darken-3;
+}
+.server_entry Button { width: 100%; } /* If using buttons for each server */
+
+#connect_first_parsed_server_button { width: 100%; margin-top: 1; }
+
+#main_log { border: panel $primary-background-darken-2; height: 8; margin-top: 1; }
+.placeholder_text { color: $text-muted; padding: 1; text-align: center; }
+
+#add_sub_dialog, #message_dialog {
+    padding: 0 1; width: 80%; max-width: 60; height: auto;
+    border: thick $secondary; background: $panel;
+}
+.modal_label { padding: 1 0; }
+.modal_buttons { padding-top: 1; align-horizontal: right; }
+.modal_buttons Button { margin-left: 1; }
