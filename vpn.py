@@ -326,43 +326,89 @@ class VpnApp(App[None]): # Added type hint for exit value
             alive, latency, msg = await self.check_single_server_conn(server_config, port)
             return {"config":server_config, "alive":alive, "latency_ms":latency, "message":msg, "ps":server_config.get("ps")}
 
-    async def check_single_server_conn(self, s_conf: dict, test_port: int) -> tuple[bool, float | None, str]:
-        s_name = s_conf.get('ps','?'); tmp_cfg_file = TEST_XRAY_CONFIG_FILE_BASE.with_name(f"{TEST_XRAY_CONFIG_FILE_BASE.name}{test_port}.json")
-        x_json = generate_xray_config(s_conf, local_socks_port=test_port, local_http_port=test_port+1)
-        if not x_json: return False, None, f"GenTestCfgFail:{s_name}"
-        with open(tmp_cfg_file, "w") as f: json.dump(x_json, f, indent=2)
-        p = None
+        async def check_single_server_conn(self, s_conf: dict, test_port: int) -> tuple[bool, float | None, str]:
+        s_name = s_conf.get('ps', f"Unknown_{test_port}") # Give a unique fallback name
+        tmp_cfg_file = TEST_XRAY_CONFIG_FILE_BASE.with_name(f"{TEST_XRAY_CONFIG_FILE_BASE.name}{test_port}.json")
+        
+        x_json = generate_xray_config(s_conf, local_socks_port=test_port, local_http_port=test_port + 1)
+        if not x_json:
+            return False, None, f"GenTestCfgFail:{s_name}"
+
+        # Ensure temp config file is written before try block
         try:
-            p = await asyncio.create_subprocess_exec(str(XRAY_PATH),"run","-c",str(tmp_cfg_file),stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL)
-            await asyncio.sleep(1.5) # Xray start time
-            if p.returncode is not None: return False, None, f"XrayTestStartFail:{s_name}"
+            with open(tmp_cfg_file, "w") as f:
+                json.dump(x_json, f, indent=2)
+        except Exception as e:
+            return False, None, f"WriteTestCfgFail:{s_name}:{str(e)[:30]}"
+
+        p = None  # Initialize Xray process variable
+        try:
+            # Launch Xray for test
+            p = await asyncio.create_subprocess_exec(
+                str(XRAY_PATH), "run", "-c", str(tmp_cfg_file),
+                stdout=asyncio.subprocess.DEVNULL, # Suppress Xray's stdout for tests
+                stderr=asyncio.subprocess.DEVNULL  # Suppress Xray's stderr for tests unless debugging
+            )
+            await asyncio.sleep(1.5)  # Give Xray some time to start or fail
+
+            if p.returncode is not None:  # Xray process exited prematurely
+                return False, None, f"XrayTestStartFail:{s_name}(RC:{p.returncode})"
             
+            # Xray seems to be running, now attempt curl test
             curl_cmd = f"curl -w '%{{time_total}}' -o /dev/null -s --connect-timeout {CURL_CONNECT_TIMEOUT} --max-time {CURL_TOTAL_TIMEOUT} --proxy socks5h://127.0.0.1:{test_port} {TEST_TARGET_URL}"
-            cp = await asyncio.create_subprocess_shell(curl_cmd,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
-            cout, cerr = await cp.communicate()
-            lat_ms, alive = None, False
-            if cp.returncode==0 and cout:
-                try: lat_ms = float(cout.decode().strip())*1000; alive=True
-                except: pass # Failed to parse time_total
-            msg = f"{int(lat_ms)}ms" if alive else f"Fail(CurlRC:{cp.returncode})"
-            return alive, lat_ms, msg
-        except Exception as e: return False, None, f"ExTest:{s_name}:{str(e)[:30]}"
+            
+            cp = await asyncio.create_subprocess_shell(
+                curl_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            cout, cerr = await cp.communicate()  # Wait for curl to complete
+            
+            latency_ms: float | None = None # Explicitly type for clarity
+            alive: bool = False
+            message_detail: str = ""
+
+            if cp.returncode == 0 and cout:
+                try:
+                    time_total_str = cout.decode().strip()
+                    latency_ms = float(time_total_str) * 1000  # Convert to ms
+                    alive = True
+                    message_detail = f"{int(latency_ms)}ms"
+                except ValueError:  # Failed to parse time_total
+                    alive = False
+                    message_detail = f"CurlTimeParseFail:{s_name}"
+            else:  # Curl failed
+                alive = False
+                # cerr_msg = cerr.decode(errors='ignore').strip()[:50] if cerr else "N/A" # Can be too verbose
+                message_detail = f"Fail(CurlRC:{cp.returncode})"
+            
+            return alive, latency_ms, message_detail
+
+        except Exception as e:
+            # General exception during the try block
+            return False, None, f"ExTest:{s_name}:{str(e)[:30]}"
+
         finally:
-                    finally:
-            if p and p.returncode is None:
+            # Cleanup logic for Xray process 'p'
+            if p and p.returncode is None:  # Check if process was started and might still be running
                 try:
                     p.terminate()
-                    await asyncio.wait_for(p.wait(), timeout=1.0)
-                except (ProcessLookupError, asyncio.TimeoutError, Exception): # Catch specific or general errors
-                    # If terminate failed or timed out, try to kill
+                    await asyncio.wait_for(p.wait(), timeout=1.0) # Wait for graceful termination
+                except (ProcessLookupError, asyncio.TimeoutError, Exception): 
+                    # If terminate failed, timed out, or process already gone, try to kill
                     try:
-                        if p.returncode is None: # Check again if it's still running
+                        if p.returncode is None:  # Check again before killing
                             p.kill()
-                            await p.wait() # Wait for kill to complete
-                    except (ProcessLookupError, Exception): # Catch errors during kill
-                        pass # Process already gone or other issue
+                            await p.wait()  # Wait for kill to complete
+                    except (ProcessLookupError, Exception):
+                        pass  # Process already gone or other issue during kill
+            
+            # Cleanup for the temporary config file
             if tmp_cfg_file.exists():
-                tmp_cfg_file.unlink(missing_ok=True) # Use missing_ok=True for Path.unlink
+                try:
+                    tmp_cfg_file.unlink(missing_ok=True)
+                except Exception:
+                    pass # Ignore errors during cleanup of temp file if any
 
 
     def compose(self) -> ComposeResult:
