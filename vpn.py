@@ -348,10 +348,22 @@ class VpnApp(App[None]): # Added type hint for exit value
             return alive, lat_ms, msg
         except Exception as e: return False, None, f"ExTest:{s_name}:{str(e)[:30]}"
         finally:
+                    finally:
             if p and p.returncode is None:
-                try: p.terminate(); await asyncio.wait_for(p.wait(),1.0)
-                except: try: p.kill(); await p.wait() except: pass
-            if tmp_cfg_file.exists(): tmp_cfg_file.unlink(True)
+                try:
+                    p.terminate()
+                    await asyncio.wait_for(p.wait(), timeout=1.0)
+                except (ProcessLookupError, asyncio.TimeoutError, Exception): # Catch specific or general errors
+                    # If terminate failed or timed out, try to kill
+                    try:
+                        if p.returncode is None: # Check again if it's still running
+                            p.kill()
+                            await p.wait() # Wait for kill to complete
+                    except (ProcessLookupError, Exception): # Catch errors during kill
+                        pass # Process already gone or other issue
+            if tmp_cfg_file.exists():
+                tmp_cfg_file.unlink(missing_ok=True) # Use missing_ok=True for Path.unlink
+
 
     def compose(self) -> ComposeResult:
         yield Header();
