@@ -17,21 +17,24 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.binding import Binding
 
+
 # --- Textual Screens ---
 class AddSubScreen(ModalScreen):
     BINDINGS = [Binding("escape", "pop_screen", "Back", show=False)]
-    def compose(self) -> ComposeResult: yield Vertical(Label("Subscription URL:"), Input(id="sub_url_input"), Horizontal(Button("Add",variant="primary",id="add_sub_button"), Button("Cancel",id="cancel_add_sub_button"), classes="modal_buttons"),id="add_sub_dialog")
+    def compose(self) -> ComposeResult: yield Vertical(Label("Subscription URL:"), Input(id="sub_url_input"), Horizontal(Button("Add", variant="primary", id="add_sub_button"), Button("Cancel", id="cancel_add_sub_button"), classes="modal_buttons"), id="add_sub_dialog")
     async def on_button_pressed(self, event: Button.Pressed) -> None: self.dismiss(self.query_one(Input).value.strip() if event.button.id == "add_sub_button" else None)
+
 
 class MessageScreen(ModalScreen):
     BINDINGS = [Binding("escape", "pop_screen", "OK", show=False)]
     def __init__(self, message: str) -> None: super().__init__(); self.message = message
-    def compose(self) -> ComposeResult: yield Vertical(Markdown(self.message), Button("OK",variant="primary",id="ok_button"),id="message_dialog")
+    def compose(self) -> ComposeResult: yield Vertical(Markdown(self.message), Button("OK", variant="primary", id="ok_button"), id="message_dialog")
     def on_button_pressed(self, event: Button.Pressed) -> None: self.dismiss()
+
 
 class AboutScreen(ModalScreen):
     BINDINGS = [Binding("escape", "pop_screen", "Back", show=False)]
-    def compose(self) -> ComposeResult: yield Vertical(Markdown(f"# {APP_TITLE} v{APP_VERSION}\n{APP_SUB_TITLE}\n\n---\nDev: **{DEVELOPER_NAME_CONST}** ({DEVELOPER_EMAIL_CONST})\n\nPowered by Textual & Xray."),Button("OK",id="ok_about_button"),id="about_dialog", classes="about_content")
+    def compose(self) -> ComposeResult: yield Vertical(Markdown(f"# {APP_TITLE} v{APP_VERSION}\n{APP_SUB_TITLE}\n\n---\nDev: **{DEVELOPER_NAME_CONST}** ({DEVELOPER_EMAIL_CONST})\n\nPowered by Textual & Xray."), Button("OK", id="ok_about_button"), id="about_dialog", classes="about_content")
     def on_button_pressed(self, event: Button.Pressed) -> None: self.dismiss()
 
 # --- Configuration ---
@@ -60,16 +63,22 @@ MAX_CONCURRENT_TESTS = 3
 CURL_CONNECT_TIMEOUT = 5
 CURL_TOTAL_TIMEOUT = 10
 
+
 # --- Helper Functions ---
 def load_subscriptions():
     if SUBS_FILE.exists():
         try:
-            with open(SUBS_FILE, "r") as f: return json.load(f)
-        except json.JSONDecodeError: return []
-        return []
+            with open(SUBS_FILE, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            return []
+    return []
+
 
 def save_subscriptions(subs):
-    with open(SUBS_FILE, "w") as f: json.dump(subs, f, indent=2)
+    with open(SUBS_FILE, "w") as f:
+        json.dump(subs, f, indent=2)
+
 
 def decode_base64_content(content: str) -> list:
     try:
@@ -77,8 +86,10 @@ def decode_base64_content(content: str) -> list:
     except Exception:
         return []
 
+
 def parse_vmess_link(vmess_link: str) -> dict | None:
-    if not vmess_link.startswith("vmess://"): return None
+    if not vmess_link.startswith("vmess://"):
+        return None
     try:
         decoded_json = base64.b64decode(vmess_link[8:] + '=' * (4 - len(vmess_link[8:]) % 4)).decode("utf-8")
         config = json.loads(decoded_json)
@@ -94,14 +105,17 @@ def parse_vmess_link(vmess_link: str) -> dict | None:
         default_sni = config.get('host') or config.get('add')
         config['sni'] = config.get('sni', default_sni or "")
         default_ps = f"{config.get('add', 'Unknown')}:{config.get('port', 'N/A')}"
-        config['ps'] = str(config.get('ps', default_ps)).strip() # Ensure ps is string
+        config['ps'] = str(config.get('ps', default_ps)).strip()  # Ensure ps is string
         config['_raw_link'] = vmess_link
         return config
     except Exception:
         return None
+
+
 def generate_xray_config(server_config: dict, local_socks_port: int = 10808, local_http_port: int = 10809) -> dict | None:
     if not server_config:
         return None
+    
     try:
         host_header = server_config.get("host", server_config.get("add"))
         xray_outbound = {
@@ -113,7 +127,7 @@ def generate_xray_config(server_config: dict, local_socks_port: int = 10808, loc
                     "users": [{
                         "id": server_config.get("id"),
                         "alterId": server_config.get("aid"),
-                        "security": "auto"
+                        "security": "auto"  # Added space after comma
                     }]
                 }]
             },
@@ -122,28 +136,32 @@ def generate_xray_config(server_config: dict, local_socks_port: int = 10808, loc
                 "security": server_config.get("tls")
             }
         }
+
         # ---- Indentation fixed here ----
         if server_config.get("net") == "ws":
             xray_outbound["streamSettings"]["wsSettings"] = {
                 "path": server_config.get("path"),
                 "headers": {"Host": host_header}
             }
-        elif server_config.get("net") == "grpc":
+        elif server_config.get("net") == "grpc": # Added space before comment
             xray_outbound["streamSettings"]["grpcSettings"] = {
                 "serviceName": server_config.get("path")
             }
+        
         if server_config.get("tls") == "tls":
-            xray_outbound["streamSettings"]["tlsSettings"] = {
+            tls_settings = { # Created a temporary dict for clarity
                 "serverName": server_config.get("sni", host_header),
                 "allowInsecure": server_config.get("allowInsecure", False)
             }
             if fp := server_config.get("fp"):
-                xray_outbound["streamSettings"]["tlsSettings"]["fingerprint"] = fp
+                tls_settings["fingerprint"] = fp
+            xray_outbound["streamSettings"]["tlsSettings"] = tls_settings
+        
         return {
             "log": {"loglevel": "none"},
             "inbounds": [
                 {"port": local_socks_port, "listen": "127.0.0.1", "protocol": "socks", "settings": {"auth": "noauth", "udp": False, "ip": "127.0.0.1"}},
-                {"port": local_http_port, "listen": "127.0.0.1", "protocol": "http", "settings": {}}
+                {"port": local_http_port, "listen": "127.0.0.1", "protocol": "http", "settings": {}}  # Added space after comma
             ],
             "outbounds": [xray_outbound, {"protocol": "freedom", "tag": "direct"}],
             "routing": {"rules": [{"type": "field", "ip": ["geoip:private"], "outboundTag": "direct"}]}
@@ -151,46 +169,101 @@ def generate_xray_config(server_config: dict, local_socks_port: int = 10808, loc
     except Exception:
         return None
 
+
 async def setup_xray_core(log_fn, show_modal_fn) -> bool:
     log_fn("Xray core not found. Attempting download setup...")
-    arch_map = {"aarch64": "linux-arm64-v8a", "armv7l": "linux-arm32-v7a", "armv8l": "linux-arm64-v8a", "x86_64": "linux-64", "i686": "linux-32"}
+    arch_map = {
+        "aarch64": "linux-arm64-v8a", 
+        "armv7l": "linux-arm32-v7a", 
+        "armv8l": "linux-arm64-v8a", 
+        "x86_64": "linux-64", 
+        "i686": "linux-32"
+    }
     current_arch = platform.machine().lower()
     xray_arch_name = arch_map.get(current_arch)
+
     if not xray_arch_name:
-        msg = f"Unsupported arch: {current_arch}. Install Xray manually."; log_fn(msg, True); await show_modal_fn(msg); return False
-    # --- Corrected Indentation Starts Here ---
+        msg = f"Unsupported arch: {current_arch}. Install Xray manually."
+        log_fn(msg, True)
+        await show_modal_fn(msg)
+        return False
+
     latest_release_url = "https://api.github.com/repos/XTLS/Xray-core/releases/latest"
     download_url_template = "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-{arch}.zip"
+    xray_zip_path = SCRIPT_DIR / f"Xray-{xray_arch_name}.zip" # Define early for except block
+
     try:
-        log_fn("Fetching latest Xray release version..."); curl_cmd_tag = f"curl -sL {latest_release_url}"
+        log_fn("Fetching latest Xray release version...")
+        curl_cmd_tag = f"curl -sL {latest_release_url}"
         p_tag = await asyncio.create_subprocess_shell(curl_cmd_tag, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         s_tag, e_tag = await p_tag.communicate()
+
         if p_tag.returncode != 0:
-            msg = f"Failed to fetch release info: {e_tag.decode(errors='ignore')[:100]}"; log_fn(msg, True); await show_modal_fn(msg + "\nInstall manually."); return False
+            msg = f"Failed to fetch release info: {e_tag.decode(errors='ignore')[:100]}"
+            log_fn(msg, True)
+            await show_modal_fn(msg + "\nInstall Xray manually.")
+            return False
+        
         latest_tag = json.loads(s_tag.decode(errors='ignore')).get("tag_name")
         if not latest_tag:
-            msg = "Could not get latest Xray tag."; log_fn(msg, True); await show_modal_fn(msg + "\nInstall manually."); return False
-        log_fn(f"Latest Xray: {latest_tag}"); xray_zip_url = download_url_template.format(tag=latest_tag, arch=xray_arch_name)
-        xray_zip_path = SCRIPT_DIR / f"Xray-{xray_arch_name}.zip"
-        log_fn(f"Downloading: {xray_zip_url}"); curl_cmd_dl = f"curl -L -o \"{str(xray_zip_path)}\" \"{xray_zip_url}\""
+            msg = "Could not get latest Xray tag."
+            log_fn(msg, True)
+            await show_modal_fn(msg + "\nInstall Xray manually.")
+            return False
+
+        log_fn(f"Latest Xray: {latest_tag}")
+        xray_zip_url = download_url_template.format(tag=latest_tag, arch=xray_arch_name)
+        
+        log_fn(f"Downloading: {xray_zip_url}")
+        curl_cmd_dl = f"curl -L -o \"{str(xray_zip_path)}\" \"{xray_zip_url}\""
         p_dl = await asyncio.create_subprocess_shell(curl_cmd_dl, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         _, e_dl = await p_dl.communicate()
+
         if p_dl.returncode != 0:
-            msg = f"Download failed: {e_dl.decode(errors='ignore')[:100]}"; log_fn(msg,True);
-            if xray_zip_path.exists(): xray_zip_path.unlink(); await show_modal_fn(msg + "\nInstall manually."); return False
-        log_fn("Extracting Xray...");
+            msg = f"Download failed: {e_dl.decode(errors='ignore')[:100]}"
+            log_fn(msg, True) # Corrected log_fn(msg,True) to log_fn(msg, True)
+            if xray_zip_path.exists():
+                xray_zip_path.unlink()
+            await show_modal_fn(msg + "\nInstall Xray manually.")
+            return False
+        
+        log_fn("Extracting Xray...")
         with zipfile.ZipFile(xray_zip_path, 'r') as z_ref:
             xray_exe_in_zip = next((m for m in z_ref.namelist() if m.lower().endswith("xray") and not m.endswith(".sig") and not m.endswith(".dgst")), None)
             if not xray_exe_in_zip:
-                msg = "No 'xray' exe in zip."; log_fn(msg,True); await show_modal_fn(msg); xray_zip_path.unlink(); return False
-            with z_ref.open(xray_exe_in_zip) as src, open(XRAY_PATH, "wb") as tgt: tgt.write(src.read())
-            log_fn(f"Extracted 'xray' to {XRAY_PATH}"); os.chmod(XRAY_PATH, 0o755); log_fn("Set Xray executable.")
-            if xray_zip_path.exists(): xray_zip_path.unlink()
-            msg_ok = "Xray core setup ok! Press 'c' or restart."; log_fn(msg_ok); await show_modal_fn(msg_ok); return True
+                msg = "No 'xray' exe in zip."
+                log_fn(msg, True) # Corrected log_fn(msg,True) to log_fn(msg, True)
+                if xray_zip_path.exists(): # Ensure path exists before unlinking
+                    xray_zip_path.unlink()
+                await show_modal_fn(msg)
+                return False
+            
+            with z_ref.open(xray_exe_in_zip) as src, open(XRAY_PATH, "wb") as tgt:
+                tgt.write(src.read())
+            
+            log_fn(f"Extracted 'xray' to {XRAY_PATH}")
+            os.chmod(XRAY_PATH, 0o755)
+            log_fn("Set Xray executable.")
+
+        msg_ok = "Xray core setup ok! Press 'c' or restart."
+        log_fn(msg_ok)
+        await show_modal_fn(msg_ok)
+        return True
+
     except Exception as e:
-        msg = f"Error Xray setup: {e}"; log_fn(msg,True);
-        if 'xray_zip_path' in locals() and xray_zip_path.exists(): xray_zip_path.unlink()
-        await show_modal_fn(msg + "\nInstall Xray manually."); return False
+        msg = f"Error Xray setup: {e}"
+        log_fn(msg, True) # Corrected log_fn(msg,True) to log_fn(msg, True)
+        if xray_zip_path.exists(): # Check if xray_zip_path was defined and exists
+            xray_zip_path.unlink()
+        await show_modal_fn(msg + "\nInstall Xray manually.")
+        return False
+    finally: # Ensure zip is unlinked even if other errors occur in try
+        if xray_zip_path.exists():
+            try:
+                xray_zip_path.unlink()
+            except OSError: # Handle potential errors during unlink if file is in use (less likely here)
+                log_fn(f"Could not unlink temporary zip file: {xray_zip_path}", True)
+
 
 # --- Main Application ---
 class VpnApp(App[None]): # Added type hint for exit value
@@ -211,16 +284,20 @@ class VpnApp(App[None]): # Added type hint for exit value
     is_testing_servers = reactive(False)
 
     def on_mount(self) -> None:
-        self.log_to_widget(f"Welcome to {self.TITLE} v{APP_VERSION}!");
+        self.log_to_widget(f"Welcome to {self.TITLE} v{APP_VERSION}!") # Semicolon removed
         self.call_later(self.check_xray_path_and_setup, silent=True)
-        if self.subscriptions: self.call_later(self.action_update_and_test_subs_action)
+        if self.subscriptions:
+            self.call_later(self.action_update_and_test_subs_action)
 
     def log_to_widget(self, message: str, is_error: bool = False):
         try:
-            log_w = self.query_one("#main_log", Log); time_str = time.strftime("%H:%M:%S")
+            log_w = self.query_one("#main_log", Log)
+            time_str = time.strftime("%H:%M:%S")
             log_w.write_line(f"[{time_str}] {'[b red]' if is_error else ''}{message}{'[/b red]' if is_error else ''}")
-        except: pass
-        if not is_error or "Xray NOT found" in message : self.active_log_message = message # Update status bar for important errors too
+        except:  # PEP 8: recommend specifying exception type, but will leave for now
+            pass
+        if not is_error or "Xray NOT found" in message:
+            self.active_log_message = message  # Update status bar for important errors too
 
     async def show_message_modal(self, message: str):
         if self.is_running: await self.push_screen(MessageScreen(message))
@@ -228,158 +305,218 @@ class VpnApp(App[None]): # Added type hint for exit value
     async def check_xray_path_and_setup(self, silent: bool = False) -> bool:
         status_w = self.query_one("#xray_path_status", Static)
         if not XRAY_PATH.exists() or not os.access(XRAY_PATH, os.X_OK):
-            msg = f"Xray NOT found/exec: {XRAY_PATH}"; status_w.update(f"[b red]{msg}[/b red]")
+            msg = f"Xray NOT found/exec: {XRAY_PATH}" # Semicolon removed
+            status_w.update(f"[b red]{msg}[/b red]")
             if not silent:
                 tip = f"\nAuto-setup will try. Else, download Xray, place in '{SCRIPT_DIR}', then `chmod +x xray`."
-                self.log_to_widget(msg + tip, True); await self.show_message_modal(msg + tip + "\n\nStarting auto-setup...")
+                self.log_to_widget(msg + tip, True) # Semicolon removed
+                await self.show_message_modal(msg + tip + "\n\nStarting auto-setup...")
                 if await setup_xray_core(self.log_to_widget, self.show_message_modal):
-                    return await self.check_xray_path_and_setup(silent=True) # Re-check after setup
-                else: return False # Setup failed
-            else: # This else corresponds to "if not silent"
-                self.log_to_widget(msg, True); return False
-        else: # This else corresponds to "if not XRAY_PATH.exists() or not os.access(XRAY_PATH, os.X_OK):"
-            ok_msg = f"Xray OK: {XRAY_PATH}"; status_w.update(f"[b green]{ok_msg}[/b green]")
-            if not silent: self.log_to_widget(ok_msg)
+                    return await self.check_xray_path_and_setup(silent=True)  # Re-check after setup
+                else:
+                    return False  # Setup failed
+            else:  # This else corresponds to "if not silent"
+                self.log_to_widget(msg, True)
+                return False
+        else:  # This else corresponds to "if not XRAY_PATH.exists() or not os.access(XRAY_PATH, os.X_OK):"
+            ok_msg = f"Xray OK: {XRAY_PATH}" # Semicolon removed
+            status_w.update(f"[b green]{ok_msg}[/b green]")
+            if not silent:
+                self.log_to_widget(ok_msg)
             return True
 
-    async def action_check_xray_path_action(self) -> None: await self.check_xray_path_and_setup(silent=False)
-    async def action_show_about_screen(self) -> None: await self.push_screen(AboutScreen())
+    async def action_check_xray_path_action(self) -> None:
+        await self.check_xray_path_and_setup(silent=False)
+
+    async def action_show_about_screen(self) -> None:
+        await self.push_screen(AboutScreen())
 
     def start_xray(self, server_config: dict) -> bool:
-        if not asyncio.run(self.check_xray_path_and_setup(silent=True)): return False # Ensure Xray is ready (run async check synchronously for this action)
+        if not asyncio.run(self.check_xray_path_and_setup(silent=True)):
+            return False # Ensure Xray is ready
         self.stop_xray()
         xray_json = generate_xray_config(server_config)
-        if not xray_json: self.log_to_widget("Fail gen main Xray cfg.", True); return False
+        if not xray_json:
+            self.log_to_widget("Fail gen main Xray cfg.", True)
+            return False
         try:
-            with open(LAST_SELECTED_CONFIG_FILE, "w") as f: json.dump(xray_json, f, indent=2)
+            with open(LAST_SELECTED_CONFIG_FILE, "w") as f:
+                json.dump(xray_json, f, indent=2)
             ps_name = server_config.get('ps', 'Unknown')
             self.log_to_widget(f"Starting Xray with '{ps_name}'.")
-            proc = subprocess.Popen([str(XRAY_PATH),"run","-c",str(LAST_SELECTED_CONFIG_FILE)],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+            proc = subprocess.Popen([str(XRAY_PATH), "run", "-c", str(LAST_SELECTED_CONFIG_FILE)], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) # Space after comma
             time.sleep(1.5)
             if proc.poll() is None:
-                with open(CURRENT_XRAY_PID_FILE, "w") as pf: pf.write(str(proc.pid))
+                with open(CURRENT_XRAY_PID_FILE, "w") as pf:
+                    pf.write(str(proc.pid))
                 self.log_to_widget(f"Xray started (PID:{proc.pid}). SOCKS:10808 HTTP:10809")
                 self.query_one("#xray_path_status", Static).update(f"[b cyan]Xray Active: {ps_name}[/b cyan]")
                 return True
-            else:
+            else:  # Xray process failed to start or exited prematurely
                 err = proc.stderr.read().decode(errors="ignore")[:200] if proc.stderr else "N/A"
                 self.log_to_widget(f"Fail start Xray. RC:{proc.returncode}. E:{err}", True)
-                if LAST_SELECTED_CONFIG_FILE.exists(): LAST_SELECTED_CONFIG_FILE.unlink(missing_ok=True); return False # python 3.8+ for missing_ok
+                if LAST_SELECTED_CONFIG_FILE.exists():
+                    LAST_SELECTED_CONFIG_FILE.unlink(missing_ok=True) # Use missing_ok=True for Pathlib
+                return False # Explicitly return False here
         except Exception as e:
             self.log_to_widget(f"Ex start Xray: {e}", True)
-            if LAST_SELECTED_CONFIG_FILE.exists(): LAST_SELECTED_CONFIG_FILE.unlink(missing_ok=True); return False # python 3.8+ for missing_ok
-        return False # Fallback
+            if LAST_SELECTED_CONFIG_FILE.exists():
+                LAST_SELECTED_CONFIG_FILE.unlink(missing_ok=True)
+            return False
+        return False # Fallback, should ideally be unreachable if all paths in try/except return explicitly
 
     def stop_xray(self) -> bool:
         pid = None
         if CURRENT_XRAY_PID_FILE.exists():
             try: pid = int(open(CURRENT_XRAY_PID_FILE).read().strip())
-            except: CURRENT_XRAY_PID_FILE.unlink(missing_ok=True) # python 3.8+ for missing_ok
+            except:
+                CURRENT_XRAY_PID_FILE.unlink(missing_ok=True) # python 3.8+ for missing_ok
         if pid:
             try:
-                os.kill(pid, subprocess.signal.SIGTERM); time.sleep(0.3)
-                os.kill(pid, 0); time.sleep(0.3); os.kill(pid, subprocess.signal.SIGKILL) # Check if still alive then kill
+                os.kill(pid, subprocess.signal.SIGTERM)
+                time.sleep(0.3)
+                os.kill(pid, 0) # Check if process exists
+                time.sleep(0.3)
+                os.kill(pid, subprocess.signal.SIGKILL) # Force kill
                 self.log_to_widget(f"Force stopped Xray (PID:{pid}).")
-            except OSError: self.log_to_widget(f"Xray (PID:{pid}) exited.") # Already exited
-            except Exception as e: self.log_to_widget(f"Err stop Xray PID {pid}: {e}", True)
-            finally: CURRENT_XRAY_PID_FILE.unlink(missing_ok=True); self.query_one("#xray_path_status", Static).update("Xray Inactive"); return True # python 3.8+ for missing_ok
-        self.query_one("#xray_path_status", Static).update("Xray Inactive (no PID)")
-        return False
+            except OSError:
+                self.log_to_widget(f"Xray (PID:{pid}) exited.") # Already exited
+            except Exception as e:
+                self.log_to_widget(f"Err stop Xray PID {pid}: {e}", True)
+            finally:  # This finally is associated with the try for killing the process
+                CURRENT_XRAY_PID_FILE.unlink(missing_ok=True)
+                self.query_one("#xray_path_status", Static).update("Xray Inactive")
+                return True  # As per original code
+        else:  # This else is for "if pid:"
+            self.query_one("#xray_path_status", Static).update("Xray Inactive (no PID)")
+            return False
 
     async def action_stop_xray_action(self) -> None:
-        if self.stop_xray(): await self.show_message_modal("Main Xray stopped.")
-        else: await self.show_message_modal("Main Xray not running/PID missing.")
+        if self.stop_xray():
+            await self.show_message_modal("Main Xray stopped.")
+        else:
+            await self.show_message_modal("Main Xray not running/PID missing.")
 
     async def action_add_subscription_action(self) -> None:
-        if self.is_testing_servers: await self.show_message_modal("Server testing in progress."); return
+        if self.is_testing_servers:
+            await self.show_message_modal("Server testing in progress.")
+            return
         new_url = await self.push_screen(AddSubScreen())
         if new_url:
-            if any(s.get('url')==new_url for s in self.subscriptions):
-                msg=f"URL '{new_url[:30]}...' exists."; self.log_to_widget(msg); await self.show_message_modal(msg); return
-            idx = 1; new_name = f"Sub_{idx}"
-            while new_name in {s.get("name") for s in self.subscriptions}: idx+=1; new_name=f"Sub_{idx}"
-            self.subscriptions = self.subscriptions + [{"name":new_name, "url":new_url, "last_update":"Never"}] # type: ignore
-            save_subscriptions(self.subscriptions); self.log_to_widget(f"Added: {new_name}");
+            if any(s.get('url') == new_url for s in self.subscriptions):
+                msg = f"URL '{new_url[:30]}...' exists."
+                self.log_to_widget(msg)
+                await self.show_message_modal(msg)
+                return
+            idx = 1
+            new_name = f"Sub_{idx}"
+            while new_name in {s.get("name") for s in self.subscriptions}:
+                idx += 1
+                new_name = f"Sub_{idx}"
+            self.subscriptions = self.subscriptions + [{"name": new_name, "url": new_url, "last_update": "Never"}]  # type: ignore
+            save_subscriptions(self.subscriptions)
+            self.log_to_widget(f"Added: {new_name}")
             self.call_later(self.action_update_and_test_subs_action)
-        else: self.log_to_widget("Add sub cancelled.")
+        else:
+            self.log_to_widget("Add sub cancelled.")
 
     async def action_update_and_test_subs_action(self) -> None:
-        if self.is_testing_servers: await self.show_message_modal("Test already in progress."); return
-        if not self.subscriptions: await self.show_message_modal("No subs. Add with 'a'."); return
-        self.is_testing_servers = True; self.active_servers = []
+        if self.is_testing_servers:
+            await self.show_message_modal("Test already in progress.")
+            return
+        if not self.subscriptions:
+            await self.show_message_modal("No subs. Add with 'a'.")
+            return
+        
+        self.is_testing_servers = True
+        self.active_servers = []
         self.query_one("#active_server_count", Static).update("[b yellow]Updating & Testing...[/b yellow]")
         self.log_to_widget("Updating subs & testing servers...")
 
-        all_raw_links, updated_subs_list = [], list(self.subscriptions) # Make a mutable copy
+        # Subscription fetching
+        all_raw_links, updated_subs_list = [], list(self.subscriptions)
         fetch_tasks = [self.fetch_single_sub(sub_entry, i) for i, sub_entry in enumerate(updated_subs_list)]
-        results = await asyncio.gather(*fetch_tasks, return_exceptions=True) # Handle individual fetch errors
+        results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
 
         for i, result_item in enumerate(results):
-            if isinstance(result_item, tuple): # Success: (index, links_list)
+            if isinstance(result_item, tuple):  # Success: (index, links_list)
                 original_index, links = result_item
                 all_raw_links.extend(links)
                 updated_subs_list[original_index]["last_update"] = time.strftime('%y-%m-%d %H:%M', time.localtime())
-            else: # Failure: Exception object
+            else:  # Failure: Exception object
                 self.log_to_widget(f"Err fetch sub {updated_subs_list[i]['name']}: {result_item}", True)
-        self.subscriptions = updated_subs_list # Update reactive list with new timestamps etc.
+        
+        self.subscriptions = updated_subs_list
         save_subscriptions(self.subscriptions)
         self.log_to_widget(f"Total raw links from all subs: {len(all_raw_links)}")
 
-        parsed_configs = []; unique_raw_links_set = set()
+        # Configuration parsing
+        parsed_configs = []
+        unique_raw_links_set = set()
         for link in all_raw_links:
             if link not in unique_raw_links_set:
-                if parsed_conf := parse_vmess_link(link): parsed_configs.append(parsed_conf)
+                if parsed_conf := parse_vmess_link(link):  # Walrus operator used here
+                    parsed_configs.append(parsed_conf)
                 unique_raw_links_set.add(link)
+        
         self.log_to_widget(f"Parsed {len(parsed_configs)} unique configs. Starting tests (max {MAX_CONCURRENT_TESTS} concurrent)...")
         if not parsed_configs:
             self.query_one("#active_server_count", Static).update("[b red]No servers to test.[/b red]")
-            self.is_testing_servers = False; return
+            self.is_testing_servers = False
+            return
 
-        test_results_list, test_semaphore = [], asyncio.Semaphore(MAX_CONCURRENT_TESTS)
+        # Server testing
+        test_semaphore = asyncio.Semaphore(MAX_CONCURRENT_TESTS)
         test_tasks = [self.perform_test_with_sem(conf, i, test_semaphore) for i, conf in enumerate(parsed_configs)]
         individual_test_run_results = await asyncio.gather(*test_tasks, return_exceptions=True)
 
         active_ones_list = []
         for r_idx, test_res_item in enumerate(individual_test_run_results):
-            server_ps_name = parsed_configs[r_idx].get('ps', f'Server {r_idx+1}')
+            server_ps_name = parsed_configs[r_idx].get('ps', f'Server {r_idx + 1}') # Added space around +
             if isinstance(test_res_item, dict) and test_res_item.get("alive"):
                 active_ones_list.append(test_res_item)
             elif isinstance(test_res_item, dict) and not test_res_item.get("alive"):
-                 self.log_to_widget(f"Test fail: {server_ps_name} - {test_res_item.get('message')}")
+                self.log_to_widget(f"Test fail: {server_ps_name} - {test_res_item.get('message')}")
             elif isinstance(test_res_item, Exception):
-                 self.log_to_widget(f"Ex during test for {server_ps_name}: {test_res_item}", True)
+                self.log_to_widget(f"Ex during test for {server_ps_name}: {test_res_item}", True)
 
         active_ones_list.sort(key=lambda x: x.get("latency_ms", float('inf')))
-        self.active_servers = active_ones_list # type: ignore
+        self.active_servers = active_ones_list  # type: ignore
         self.log_to_widget(f"Testing complete. Active servers: {len(self.active_servers)}")
         self.is_testing_servers = False
 
     async def fetch_single_sub(self, sub_entry: dict, index: int) -> tuple[int, list] | Exception:
-        url, name = sub_entry.get("url"), sub_entry.get("name", f"S_{index+1}")
-        self.log_to_widget(f"Fetching: {name}...");
+        url, name = sub_entry.get("url"), sub_entry.get("name", f"S_{index + 1}") # Added space
+        self.log_to_widget(f"Fetching: {name}...") # Removed semicolon
         try:
             # Increased timeout for subscription fetch as they can be large
-            p = await asyncio.create_subprocess_shell(f"curl -L -s --connect-timeout {CURL_CONNECT_TIMEOUT*2} --max-time {CURL_TOTAL_TIMEOUT*3} '{url}'",stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+            p = await asyncio.create_subprocess_shell(
+                f"curl -L -s --connect-timeout {CURL_CONNECT_TIMEOUT * 2} --max-time {CURL_TOTAL_TIMEOUT * 3} '{url}'", # Added spaces
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
             out, err = await p.communicate()
-            if p.returncode==0 and out:
-                links=decode_base64_content(out.decode(errors="ignore"));
-                self.log_to_widget(f"Decoded {len(links)} links from {name}.");
+            if p.returncode == 0 and out:
+                links = decode_base64_content(out.decode(errors="ignore")) # Removed semicolon
+                self.log_to_widget(f"Decoded {len(links)} links from {name}.") # Removed semicolon
                 return index, links # Return original index for correct timestamp update
-            else: return ConnectionError(f"Fetch {name}(RC:{p.returncode}):{err.decode(errors='ignore')[:100].strip() or 'N/A'}")
-        except Exception as e: return e # Catch any other exception like timeout
+            else:
+                return ConnectionError(f"Fetch {name}(RC:{p.returncode}):{err.decode(errors='ignore')[:100].strip() or 'N/A'}")
+        except Exception as e:
+            return e # Catch any other exception like timeout
 
     async def perform_test_with_sem(self, server_config: dict, test_idx: int, semaphore: asyncio.Semaphore) -> dict:
         async with semaphore:
-            port = TEST_SOCKS_PORT_BASE + (test_idx % MAX_CONCURRENT_TESTS) # Reuse ports with modulo
+            port = TEST_SOCKS_PORT_BASE + (test_idx % MAX_CONCURRENT_TESTS)  # Reuse ports with modulo
             # self.log_to_widget(f"Testing {server_config.get('ps','Unknown')} on SOCKS port {port}...") # Can be too verbose
             alive, latency, msg = await self.check_single_server_conn(server_config, port)
-            return {"config":server_config, "alive":alive, "latency_ms":latency, "message":msg, "ps":server_config.get("ps")}
+            return {"config": server_config, "alive": alive, "latency_ms": latency, "message": msg, "ps": server_config.get("ps")}
 
     async def check_single_server_conn(self, s_conf: dict, test_port: int) -> tuple[bool, float | None, str]:
-        s_name = s_conf.get('ps', f"Unknown_{test_port}") # Give a unique fallback name
+        s_name = s_conf.get('ps', f"Unknown_{test_port}")  # Give a unique fallback name
         tmp_cfg_file = TEST_XRAY_CONFIG_FILE_BASE.with_name(f"{TEST_XRAY_CONFIG_FILE_BASE.name}{test_port}.json")
 
-        x_json = generate_xray_config(s_conf, local_socks_port=test_port, local_http_port=test_port + 1) # HTTP test port adjacent to SOCKS
+        x_json = generate_xray_config(s_conf, local_socks_port=test_port, local_http_port=test_port + 1)  # HTTP test port adjacent to SOCKS
         if not x_json:
             return False, None, f"GenTestCfgFail:{s_name}"
 
@@ -443,93 +580,119 @@ class VpnApp(App[None]): # Added type hint for exit value
                     await asyncio.wait_for(p_xray_test.wait(), timeout=1.0)
                 except (ProcessLookupError, asyncio.TimeoutError, Exception):
                     try:
-                        if p_xray_test.returncode is None: p_xray_test.kill(); await p_xray_test.wait()
-                    except (ProcessLookupError, Exception): pass # Already gone or other issue
+                        if p_xray_test.returncode is None:
+                            p_xray_test.kill()
+                            await p_xray_test.wait()
+                    except (ProcessLookupError, Exception):
+                        pass # Already gone or other issue
 
             if tmp_cfg_file.exists():
-                try: tmp_cfg_file.unlink(missing_ok=True) # Python 3.8+
-                except Exception: pass
+                try:
+                    tmp_cfg_file.unlink(missing_ok=True) # Python 3.8+
+                except Exception:
+                    pass
 
 
     def compose(self) -> ComposeResult:
-        yield Header();
+        yield Header() # Removed semicolon
         with Vertical(id="main_layout"):
             with Horizontal(id="status_bar"):
-                yield Static("Xray status...",id="xray_path_status",classes="status_item")
-                yield Static("",id="active_server_count",classes="status_item status_count")
-                yield Static(self.active_log_message,id="active_log_display",classes="status_item status_log") # type: ignore
-            yield Label("Subscriptions:",classes="section_header")
-            yield VerticalScroll(id="subscriptions_list_container",classes="list_container_subs")
-            yield Label("Active Servers (Sorted by Ping):",classes="section_header")
-            yield VerticalScroll(id="server_list_display_container",classes="list_container_servers")
-            yield Label("Log:",classes="section_header")
-            yield Log(id="main_log",auto_scroll=True,max_lines=250,markup=True,highlight=True)
-        yield Footer();
-        self.call_later(self.update_subscription_list_ui);
+                yield Static("Xray status...", id="xray_path_status", classes="status_item")
+                yield Static("", id="active_server_count", classes="status_item status_count")
+                yield Static(self.active_log_message, id="active_log_display", classes="status_item status_log") # type: ignore
+            yield Label("Subscriptions:", classes="section_header")
+            yield VerticalScroll(id="subscriptions_list_container", classes="list_container_subs")
+            yield Label("Active Servers (Sorted by Ping):", classes="section_header")
+            yield VerticalScroll(id="server_list_display_container", classes="list_container_servers")
+            yield Label("Log:", classes="section_header")
+            yield Log(id="main_log", auto_scroll=True, max_lines=250, markup=True, highlight=True)
+        yield Footer() # Removed semicolon
+        self.call_later(self.update_subscription_list_ui)
         self.call_later(self.update_active_server_list_ui)
 
-    async def watch_subscriptions(self, _:list, new_s:list) -> None: self.update_subscription_list_ui() # type: ignore
+    async def watch_subscriptions(self, _: list, new_s: list) -> None:  # Added space after colon
+        self.update_subscription_list_ui() # type: ignore
 
     def update_subscription_list_ui(self):
-        c = self.query_one("#subscriptions_list_container",VerticalScroll); c.remove_children()
-        if not self.subscriptions: c.mount(Static("No subs. 'a' to add.",classes="placeholder_text"))
+        c = self.query_one("#subscriptions_list_container", VerticalScroll)  # Semicolon removed
+        c.remove_children()
+        if not self.subscriptions:
+            c.mount(Static("No subs. 'a' to add.", classes="placeholder_text"))
         else:
-            for i,s in enumerate(self.subscriptions):
-                n,u,t = s.get("name",f"S_{i+1}"),s.get("url","N/A"),s.get("last_update","Never")
-                u_s = u[:35]+"..." if len(u)>38 else u; c.mount(Markdown(f"**{n}**: `{u_s}` (Upd: {t})",classes="sub_entry"))
+            for i, s in enumerate(self.subscriptions):
+                n, u, t = s.get("name", f"S_{i + 1}"), s.get("url", "N/A"), s.get("last_update", "Never") # Spaces around =
+                u_s = u[:35] + "..." if len(u) > 38 else u # Spaces around + and >
+                c.mount(Markdown(f"**{n}**: `{u_s}` (Upd: {t})", classes="sub_entry")) # Semicolon removed
 
-    async def watch_active_servers(self, _:list, new_a_s:list) -> None: # type: ignore
+    async def watch_active_servers(self, _: list, new_a_s: list) -> None:  # type: ignore
         self.update_active_server_list_ui()
         cnt_str = f"[b #00FF00]Active: {len(new_a_s)}[/]" if not self.is_testing_servers else "[b #FFFF00]Testing...[/]"
-        if not new_a_s and not self.is_testing_servers: cnt_str = "[b #FF0000]No active servers.[/]"
-        self.query_one("#active_server_count",Static).update(cnt_str)
+        if not new_a_s and not self.is_testing_servers:
+            cnt_str = "[b #FF0000]No active servers.[/]"
+        self.query_one("#active_server_count", Static).update(cnt_str)
 
     async def watch_is_testing_servers(self, old_val: bool, new_val: bool) -> None:
         # This watcher ensures the count string is updated once testing is complete
-        if old_val == True and new_val == False: # Testing just finished
+        if old_val is True and new_val is False:  # Use 'is' for True/False comparison
             cnt_str = f"[b #00FF00]Active: {len(self.active_servers)}[/]"
-            if not self.active_servers : cnt_str = "[b #FF0000]No active servers.[/]"
-            self.query_one("#active_server_count",Static).update(cnt_str)
-
+            if not self.active_servers: # Removed space before colon
+                cnt_str = "[b #FF0000]No active servers.[/]"
+            self.query_one("#active_server_count", Static).update(cnt_str)
 
     def update_active_server_list_ui(self):
-        c = self.query_one("#server_list_display_container",VerticalScroll); c.remove_children()
-        if self.is_testing_servers and not self.active_servers: c.mount(Static("Testing servers...",classes="placeholder_text")); return
-        if not self.active_servers: c.mount(Static("No active servers. Update/Test with 'u'.",classes="placeholder_text")); return
+        c = self.query_one("#server_list_display_container", VerticalScroll) # Semicolon removed
+        c.remove_children()
+        if self.is_testing_servers and not self.active_servers:
+            c.mount(Static("Testing servers...", classes="placeholder_text"))
+            return
+        if not self.active_servers:
+            c.mount(Static("No active servers. Update/Test with 'u'.", classes="placeholder_text"))
+            return
 
-        c.mount(Static(f"Showing {len(self.active_servers)} active server(s):")) # Info line
-        for i,s_info in enumerate(self.active_servers): # Changed idx to i
-            conf,lat = s_info["config"],s_info.get("latency_ms") # type: ignore
-            ps,addr,net,tls = conf.get("ps",f"S_{i+1}"),conf.get("add","?"),conf.get("net","?"),"TLS" if conf.get("tls")=="tls" else "NoTLS" # Changed idx to i
+        c.mount(Static(f"Showing {len(self.active_servers)} active server(s):"))  # Info line
+        for i, s_info in enumerate(self.active_servers): 
+            conf, lat = s_info["config"], s_info.get("latency_ms") # type: ignore, spaces around =
+            ps, addr, net, tls = conf.get("ps", f"S_{i + 1}"), conf.get("add", "?"), conf.get("net", "?"), "TLS" if conf.get("tls") == "tls" else "NoTLS" # Spaces
             lat_s = f"{int(lat)}ms" if lat is not None else "N/A"
-            display_md = f"[[b yellow]{i+1:2}[/b yellow]] ([b #00CF00]{lat_s:>7}[/]) **{ps}** (`{addr} | {net}/{tls}`)" # Changed idx to i
+            display_md = f"[[b yellow]{i + 1:2}[/b yellow]] ([b #00CF00]{lat_s:>7}[/]) **{ps}** (`{addr} | {net}/{tls}`)" 
             c.mount(Markdown(display_md, classes="server_entry"))
 
         # Add Connect button separately if there are active servers
         if self.active_servers:
-            f_active_conf = self.active_servers[0]["config"] # type: ignore
-            f_name = f_active_conf.get("ps","1st Active") # type: ignore
-            con_btn = Button(f"Connect: {f_name}",variant="success",id="connect_first_active_server_button")
-            btn_c = Horizontal(con_btn, classes="action_buttons_container"); c.mount(btn_c)
+            f_active_conf = self.active_servers[0]["config"]  # type: ignore
+            f_name = f_active_conf.get("ps", "1st Active")  # type: ignore
+            con_btn = Button(f"Connect: {f_name}", variant="success", id="connect_first_active_server_button")
+            btn_c = Horizontal(con_btn, classes="action_buttons_container") # Semicolon removed
+            c.mount(btn_c)
 
-    async def watch_active_log_message(self, _:str, new_msg:str)->None:
-        try: self.query_one("#active_log_display",Static).update(new_msg[:65]) # Limit length
-        except: pass
+    async def watch_active_log_message(self, _: str, new_msg: str) -> None: # Added space after colon
+        try:
+            self.query_one("#active_log_display", Static).update(new_msg[:65]) # Limit length
+        except:  # PEP 8: specify exception
+            pass
 
-    async def on_button_pressed(self, event:Button.Pressed) -> None:
+    async def on_button_pressed(self, event: Button.Pressed) -> None: # Added space after colon
         btn_id = event.button.id
         if btn_id == "connect_first_active_server_button":
-            if self.is_testing_servers: await self.show_message_modal("Testing servers. Cannot connect."); return
+            if self.is_testing_servers:
+                await self.show_message_modal("Testing servers. Cannot connect.")
+                return
             if self.active_servers:
-                s_to_conn = self.active_servers[0]["config"] # type: ignore
-                self.log_to_widget(f"Connect btn for: {s_to_conn.get('ps')}") # type: ignore
-                if self.start_xray(s_to_conn): await self.show_message_modal(f"Xray started with: '{s_to_conn.get('ps')}'") # type: ignore
-                else: await self.show_message_modal("Failed to start Xray.") # This was missing
-            else: await self.show_message_modal("No active servers to connect.") # This was missing
+                s_to_conn = self.active_servers[0]["config"]  # type: ignore
+                self.log_to_widget(f"Connect btn for: {s_to_conn.get('ps')}")  # type: ignore
+                if self.start_xray(s_to_conn):
+                    await self.show_message_modal(f"Xray started with: '{s_to_conn.get('ps')}'")  # type: ignore
+                else:
+                    await self.show_message_modal("Failed to start Xray.") 
+            else:
+                await self.show_message_modal("No active servers to connect.") 
 
     async def action_quit_app(self) -> None:
-        self.log_to_widget("Quit requested. Stopping Xray..."); self.stop_xray()
-        self.log_to_widget("Exiting application."); self.exit()
+        self.log_to_widget("Quit requested. Stopping Xray...") # Semicolon removed
+        self.stop_xray()
+        self.log_to_widget("Exiting application.") # Semicolon removed
+        self.exit()
+
 
 VPN_APP_CSS_FALLBACK = """
                                                 Screen { background: $surface; color: $text; layout: vertical; overflow-y: auto; }
@@ -556,9 +719,10 @@ VPN_APP_CSS_FALLBACK = """
                                                 .about_content Markdown { padding: 1 2; }
                                                 """
 
-                                                if __name__ == "__main__":
-                                                    css_f = SCRIPT_DIR / VpnApp.CSS_PATH
-                                                    if not css_f.exists():
-                                                        with open(css_f, "w") as f: f.write(VPN_APP_CSS_FALLBACK)
-                                                        print(f"Created CSS: {css_f} with fallback.")
-                                                        VpnApp().run()
+
+if __name__ == "__main__":
+    css_f = SCRIPT_DIR / VpnApp.CSS_PATH
+    if not css_f.exists():
+        with open(css_f, "w") as f: f.write(VPN_APP_CSS_FALLBACK)
+        print(f"Created CSS: {css_f} with fallback.")
+    VpnApp().run()
