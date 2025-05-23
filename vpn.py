@@ -82,6 +82,57 @@ def parse_vmess_link(vmess_link: str) -> dict | None:
         return config
     except Exception:
         return None
+def generate_xray_config(server_config: dict, local_socks_port: int = 10808, local_http_port: int = 10809) -> dict | None:
+    if not server_config:
+        return None
+    try:
+        host_header = server_config.get("host", server_config.get("add"))
+        xray_outbound = {
+            "protocol": "vmess",
+            "settings": {
+                "vnext": [{
+                    "address": server_config.get("add"),
+                    "port": server_config.get("port"),
+                    "users": [{
+                        "id": server_config.get("id"),
+                        "alterId": server_config.get("aid"),
+                        "security": "auto"
+                    }]
+                }]
+            },
+            "streamSettings": {
+                "network": server_config.get("net"),
+                "security": server_config.get("tls")
+            }
+        }
+        # ---- Indentation fixed here ----
+        if server_config.get("net") == "ws":
+            xray_outbound["streamSettings"]["wsSettings"] = {
+                "path": server_config.get("path"),
+                "headers": {"Host": host_header}
+            }
+        elif server_config.get("net") == "grpc":
+            xray_outbound["streamSettings"]["grpcSettings"] = {
+                "serviceName": server_config.get("path")
+            }
+        if server_config.get("tls") == "tls":
+            xray_outbound["streamSettings"]["tlsSettings"] = {
+                "serverName": server_config.get("sni", host_header),
+                "allowInsecure": server_config.get("allowInsecure", False)
+            }
+            if fp := server_config.get("fp"):
+                xray_outbound["streamSettings"]["tlsSettings"]["fingerprint"] = fp
+        return {
+            "log": {"loglevel": "none"},
+            "inbounds": [
+                {"port": local_socks_port, "listen": "127.0.0.1", "protocol": "socks", "settings": {"auth": "noauth", "udp": False, "ip": "127.0.0.1"}},
+                {"port": local_http_port, "listen": "127.0.0.1", "protocol": "http", "settings": {}}
+            ],
+            "outbounds": [xray_outbound, {"protocol": "freedom", "tag": "direct"}],
+            "routing": {"rules": [{"type": "field", "ip": ["geoip:private"], "outboundTag": "direct"}]}
+        }
+    except Exception:
+        return None
 
 def generate_xray_config(server_config: dict, local_socks_port: int = 10808, local_http_port: int = 10809) -> dict | None:
     if not server_config: return None
