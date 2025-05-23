@@ -54,10 +54,10 @@ def load_subscriptions():
 def save_subscriptions(subs):
     with open(SUBS_FILE, "w") as f: json.dump(subs, f, indent=2)
 
-    def decode_base64_content(content: str) -> list:
-        try:
-            return base64.b64decode(content).decode("utf-8").strip().splitlines()
-except Exception:
+def decode_base64_content(content: str) -> list:
+    try:
+        return base64.b64decode(content).decode("utf-8").strip().splitlines()
+    except Exception:
         return []
 
 def parse_vmess_link(vmess_link: str) -> dict | None:
