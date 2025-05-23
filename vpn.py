@@ -80,7 +80,8 @@ def parse_vmess_link(vmess_link: str) -> dict | None:
         config['ps'] = str(config.get('ps', default_ps)).strip() # Ensure ps is string
         config['_raw_link'] = vmess_link
         return config
-except Exception: return None
+except Exception:
+        return None
 
 def generate_xray_config(server_config: dict, local_socks_port: int = 10808, local_http_port: int = 10809) -> dict | None:
     if not server_config: return None
